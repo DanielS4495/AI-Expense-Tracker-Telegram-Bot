@@ -20,7 +20,9 @@
     "express": "^5.1.0",
     "filters": "^1.0.6",
     "openai": "^6.9.1",
-    "telegraf": "^4.16.3"
+    "telegraf": "^4.16.3",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.9.3"
   },
   "devDependencies": {
     "@types/express": "^5.0.5",
@@ -31,8 +33,6 @@
     "nodemon": "^3.1.11",
     "prisma": "^6.19.0",
     "supertest": "^7.1.4",
-    "ts-jest": "^29.4.5",
-    "ts-node": "^10.9.2",
-    "typescript": "^5.9.3"
+    "ts-jest": "^29.4.5"
   }
 }
