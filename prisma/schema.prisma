@@ -1,0 +1,44 @@
+generator client {
+  provider = "prisma-client-js"
+  output   = "../node_modules/.prisma/client"
+}
+
+datasource db {
+  provider = "postgresql"  
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id             Int      @id @default(autoincrement())
+  phoneNumber    String   @unique @map("phone_number")      
+  telegramChatId String?  @unique @map("telegram_chat_id")  
+  isProMember    Boolean  @default(false) @map("is_pro")    
+  createdAt      DateTime @default(now()) @map("created_at") 
+  billingDay     Int      @default(1) @map("billing_day")    
+  expenses       Expense[]
+  conversation   ConversationState? 
+  @@map("users")
+}
+
+model Expense {
+  id          Int      @id @default(autoincrement())
+  userId      Int      @map("user_id")
+  item        String
+  amount      Float
+  category    String   @default("General")
+  location    String?  
+  expenseDate DateTime @default(now()) @map("expense_date") 
+  createdAt   DateTime @default(now()) @map("created_at")
+  user        User     @relation(fields: [userId], references: [id])
+  @@map("expenses")
+}
+
+model ConversationState {
+  id        Int      @id @default(autoincrement())
+  userId    Int      @unique @map("user_id")
+  data      String   
+  updatedAt DateTime @updatedAt @map("updated_at")
+  user      User     @relation(fields: [userId], references: [id])
+  @@map("conversation_states")
+}
+
