@@ -5,10 +5,12 @@ import { analyzeText } from './openai.service';
 const prisma = new PrismaClient();
 const bot = new Telegraf(process.env.TELEGRAM_BOT_TOKEN as string);
 
-// --- פונקציית עזר לעיצוב אחיד ---
+// --- פונקציית עזר לעיצוב אחיד (כולל שעה ומיקום) ---
 const formatExpense = (exp: any) => {
   const d = new Date(exp.expenseDate || exp.createdAt);
-  const dateStr = `${d.getDate().toString().padStart(2, '0')}/${(d.getMonth() + 1).toString().padStart(2, '0')} ${d.getHours().toString().padStart(2, '0')}:${d.getMinutes().toString().padStart(2, '0')}`;
+  const dateStr = d.toLocaleString('he-IL', { 
+      day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit', hour12: false 
+  }).replace(',', '');
   
   let locStr = '';
   if (exp.location && exp.location.toLowerCase() !== 'unknown' && exp.location.trim() !== '') {
@@ -22,6 +24,7 @@ const normalizeText = (str: string) => {
     return str.replace(/['"״׳-]/g, '').trim().toLowerCase();
 };
 
+// --- הודעת הפתיחה המושקעת ---
 bot.start((ctx) => {
   const welcomeMessage = `
 👋 <b>ברוכים הבאים ל-Expense Tracker!</b>
@@ -47,7 +50,7 @@ bot.start((ctx) => {
 • "תמחק הכל" (זהירות!)
 
 👇 <b>כדי להתחיל, אני צריך לזהות אותך בצורה מאובטחת:</b>
-אנא לחץ על הכפתור למטה ⌘ לשתף את המספר שלך.
+אנא לחץ על הכפתור למטה לשתף את המספר שלך.
 `;
 
   ctx.reply(welcomeMessage, {
@@ -58,6 +61,7 @@ bot.start((ctx) => {
   });
 });
 
+// --- הרשמה מאובטחת ---
 bot.on('contact', async (ctx) => {
   const contact = ctx.message.contact;
   if (contact.user_id !== ctx.from.id) return ctx.reply('❌ שגיאת אבטחה: רק המספר שלך.');
@@ -67,13 +71,14 @@ bot.on('contact', async (ctx) => {
 
   try {
     await prisma.user.upsert({ where: { phoneNumber }, update: { telegramChatId: ctx.chat.id.toString() }, create: { phoneNumber, telegramChatId: ctx.chat.id.toString() } });
-    ctx.reply(`✅ נרשמת בהצלחה!\nהמספר המאומת: ${phoneNumber}`);
+    ctx.reply(`✅ נרשמת בהצלחה!\nהמספר המאומת: ${phoneNumber}\nהמקלדת הוסרה, אפשר להתחיל לכתוב.`, Markup.removeKeyboard());
   } catch (error) {
     console.error(error);
     ctx.reply('תקלה ברישום.');
   }
 });
 
+// --- המוח המרכזי ---
 bot.on('text', async (ctx) => {
   const chatId = ctx.chat.id.toString();
   const text = ctx.message.text.trim();
@@ -87,7 +92,6 @@ bot.on('text', async (ctx) => {
   const processingMsg = await ctx.reply('🤔 מנתח...');
   
   try {
-    // --- ניהול זיכרון ---
     let previousContext = null;
     if (user.conversation) {
         const diff = (new Date().getTime() - new Date(user.conversation.updatedAt).getTime()) / 60000;
@@ -119,7 +123,6 @@ bot.on('text', async (ctx) => {
           for (const exp of analysis.expenses) {
              if (!exp.item || exp.item.trim().length < 2) continue;
              
-             // הגנה מתאריך עתידי
              const d = exp.date ? new Date(exp.date) : new Date();
              if (d > new Date()) {
                  const niceDate = `${d.getDate()}/${d.getMonth()+1}`;
@@ -150,7 +153,7 @@ bot.on('text', async (ctx) => {
               ctx.telegram.editMessageText(ctx.chat.id, processingMsg.message_id, undefined, 'לא נשמר כלום.');
           }
         } else {
-            ctx.telegram.editMessageText(ctx.chat.id, processingMsg.message_id, undefined, 'לא הבנתי מה לשמור.');
+            ctx.telegram.editMessageText(ctx.chat.id, processingMsg.message_id, undefined, 'לא זוהו נתונים.');
         }
         break;
 
@@ -176,7 +179,7 @@ bot.on('text', async (ctx) => {
              if (analysis.new_date) {
                  const d = new Date(analysis.new_date);
                  if (!isNaN(d.getTime()) && d <= new Date()) data.expenseDate = d;
-                 else if (d > new Date()) { ctx.telegram.editMessageText(ctx.chat.id, processingMsg.message_id, undefined, '❌ שגיאה: תאריך עתידי.'); return; }
+                 else if (d > new Date()) { ctx.telegram.editMessageText(ctx.chat.id, processingMsg.message_id, undefined, '❌ תאריך עתידי.'); return; }
              }
              const updated = await prisma.expense.update({ where: { id: lastToUpdate.id }, data });
              ctx.telegram.editMessageText(ctx.chat.id, processingMsg.message_id, undefined, `<b>✅ עודכן:</b>\n\n${formatExpense(updated)}`, { parse_mode: 'HTML' });
@@ -188,34 +191,28 @@ bot.on('text', async (ctx) => {
 
       case 'update_expense':
         if (analysis.search_term) {
-           // --- חיפוש חכם (הוחזר!) ---
-           // שולפים את ה-50 האחרונים כדי לסנן ב-JS (מאפשר התעלמות מגרשיים)
-           const candidates = await prisma.expense.findMany({
-               where: { userId: user.id },
-               orderBy: { createdAt: 'desc' },
-               take: 50
-           });
-
-           const searchClean = normalizeText(analysis.search_term);
-           const item = candidates.find(e => normalizeText(e.item).includes(searchClean));
+           const cleanSearch = normalizeText(analysis.search_term);
+           const items = await prisma.expense.findMany({ where: { userId: user.id }, orderBy: { createdAt: 'desc' }, take: 50 });
+           
+           const item = items.find(e => normalizeText(e.item).includes(cleanSearch));
 
            if (item) {
                const data: any = {};
                if (analysis.new_amount !== undefined && analysis.new_amount !== null) data.amount = analysis.new_amount;
                if (analysis.new_item && analysis.new_item.trim() !== '') data.item = analysis.new_item;
-               if (analysis.new_location) data.location = analysis.new_location;
+               if (analysis.new_location && analysis.new_location.trim() !== '') data.location = analysis.new_location;
 
                if (analysis.new_date) {
                    const d = new Date(analysis.new_date);
                    if (!isNaN(d.getTime()) && d <= new Date()) data.expenseDate = d;
-                   else if (d > new Date()) { ctx.telegram.editMessageText(ctx.chat.id, processingMsg.message_id, undefined, '❌ שגיאה: תאריך עתידי.'); return; }
+                   else if (d > new Date()) { ctx.telegram.editMessageText(ctx.chat.id, processingMsg.message_id, undefined, '❌ תאריך עתידי.'); return; }
                }
                
                if (Object.keys(data).length > 0) {
                    const updated = await prisma.expense.update({ where: { id: item.id }, data });
                    ctx.telegram.editMessageText(ctx.chat.id, processingMsg.message_id, undefined, `<b>✅ עודכן:</b>\n\n${formatExpense(updated)}`, { parse_mode: 'HTML' });
                } else {
-                   ctx.telegram.editMessageText(ctx.chat.id, processingMsg.message_id, undefined, 'לא זיהיתי שינוי בנתונים.');
+                   ctx.telegram.editMessageText(ctx.chat.id, processingMsg.message_id, undefined, 'לא זיהיתי נתונים לשינוי.');
                }
            } else {
                ctx.telegram.editMessageText(ctx.chat.id, processingMsg.message_id, undefined, `לא מצאתי את "${analysis.search_term}".`);
@@ -228,7 +225,7 @@ bot.on('text', async (ctx) => {
         const last = await prisma.expense.findFirst({ where: { userId: user.id }, orderBy: { id: 'desc' }});
         if (last) {
             await prisma.expense.delete({ where: { id: last.id }});
-            ctx.telegram.editMessageText(ctx.chat.id, processingMsg.message_id, undefined, `🗑️ <b>נמחק:</b> <s>${last.item}</s>`, { parse_mode: 'HTML' });
+            ctx.telegram.editMessageText(ctx.chat.id, processingMsg.message_id, undefined, `🗑️ <b>נמחק:</b> <s>${last.item}</s> (${last.amount}₪)`, { parse_mode: 'HTML' });
         } else {
             ctx.telegram.editMessageText(ctx.chat.id, processingMsg.message_id, undefined, 'אין מה למחוק.');
         }
@@ -237,14 +234,9 @@ bot.on('text', async (ctx) => {
 
       case 'delete_specific_expense':
          if (analysis.search_term) {
-             // גם כאן החזרתי את החיפוש החכם
-             const candidates = await prisma.expense.findMany({
-                 where: { userId: user.id },
-                 orderBy: { createdAt: 'desc' },
-                 take: 50
-             });
-             const searchClean = normalizeText(analysis.search_term);
-             const matches = candidates.filter(e => normalizeText(e.item).includes(searchClean));
+             const items = await prisma.expense.findMany({ where: { userId: user.id }, orderBy: { createdAt: 'desc' }, take: 50 });
+             const cleanSearch = normalizeText(analysis.search_term);
+             const matches = items.filter(e => normalizeText(e.item).includes(cleanSearch));
 
              if (matches.length > 0) {
                  if (analysis.delete_all) {
@@ -280,7 +272,7 @@ bot.on('text', async (ctx) => {
 export const initTelegramBot = async () => {
   if (!process.env.TELEGRAM_BOT_TOKEN) { console.error('❌ Missing Token'); return; }
   try {
-    bot.launch();
+    await bot.launch();
     console.log('🤖 Telegram Bot Started Successfully!');
     const stopBot = (signal: string) => bot.stop(signal);
     process.once('SIGINT', () => stopBot('SIGINT'));
