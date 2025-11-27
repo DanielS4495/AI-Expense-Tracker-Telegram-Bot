@@ -41,7 +41,7 @@
 
 ### 1. שכפול הפרויקט
 ```bash
-git clone https://github.com/YourUsername/expense-tracker-bot.git
+git clone https://github.com/DanielS4495/AI-Expense-Tracker-Telegram-Bot.git
 cd backend
 ````
 
