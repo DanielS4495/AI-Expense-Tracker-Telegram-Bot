@@ -69,7 +69,7 @@ export const analyzeText = async (text: string, previousContext: any = null): Pr
             ${contextPrompt}
 
             *** RULES ***:
-            1. **Add Expense**: Needs ITEM + PRICE. Future date blocked by system.
+            1. **Add Expense**: Needs ITEM + Expense. Future date blocked by system.
             2. **Updates**: 
                - Can update: Amount, Name, Date, Location.
                - "Bought at Zara" / "Change store to Gong" -> new_location: "Zara/Gong".
@@ -77,7 +77,7 @@ export const analyzeText = async (text: string, previousContext: any = null): Pr
             
             *** DISTINCTION ***:
             - "ב-5" (Date context) -> new_date (TIME).
-            - "ב-5" (Price context) -> new_amount (PRICE).
+            - "ב-5" (Expense context) -> new_amount (Expense).
 
             Actions: "add_expense", "list_expenses", "delete_last_expense", "delete_specific_expense", "update_expense", "update_last_expense", "reset_data", "ask_for_info".
 

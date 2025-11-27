@@ -272,7 +272,7 @@ bot.on('text', async (ctx) => {
 export const initTelegramBot = async () => {
   if (!process.env.TELEGRAM_BOT_TOKEN) { console.error('❌ Missing Token'); return; }
   try {
-    await bot.launch();
+    bot.launch();
     console.log('🤖 Telegram Bot Started Successfully!');
     const stopBot = (signal: string) => bot.stop(signal);
     process.once('SIGINT', () => stopBot('SIGINT'));
