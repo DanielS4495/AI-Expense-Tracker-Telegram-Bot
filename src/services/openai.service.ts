@@ -118,9 +118,25 @@ export const analyzeText = async (text: string, previousContext: any = null): Pr
     const content = response.choices[0].message.content;
     if (!content) throw new Error('No content');
     
-    const cleaned = cleanJsonOutput(content);
+  const cleaned = cleanJsonOutput(content);
     console.log("AI Response:", cleaned);
-    return JSON.parse(cleaned) as ExpenseAnalysis;
+    
+    // --- התיקון מתחיל כאן ---
+    const parsed = JSON.parse(cleaned);
+
+    // אם ה-AI החזיר פריט בודד שטוח (add_expense), נמיר אותו למערך expenses
+    if (parsed.action === 'add_expense' && !parsed.expenses && parsed.item) {
+        parsed.expenses = [{
+            item: parsed.item,
+            amount: parsed.amount || 0,
+            category: parsed.category,
+            location: parsed.location,
+            date: parsed.date
+        }];
+    }
+    // -------------------------
+
+    return parsed as ExpenseAnalysis;
 
   } catch (error) {
     console.error('AI Error:', error);
